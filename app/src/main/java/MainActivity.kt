@@ -1330,7 +1330,17 @@ class MainActivity : Activity() {
 
     private fun saveHomeLayout() {
         getSharedPreferences(prefsName, MODE_PRIVATE).edit {
-            for (page in 0 until pageCount) putString("page_" + page, homePackages[page].joinToString("|"))
+            for (page in 0 until pageCount) {
+                putString("page_" + page, homePackages[page].joinToString("|"))
+                for (index in homePackages[page].indices) {
+                    if (index < homeGrids[page].childCount) {
+                        val child = homeGrids[page].getChildAt(index)
+                        val key = homePackages[page][index].replace("/", "_")
+                        putFloat("pos_" + page + "_" + key + "_x", child.translationX)
+                        putFloat("pos_" + page + "_" + key + "_y", child.translationY)
+                    }
+                }
+            }
             for ((id, name) in folderNames) {
                 putString("folder_name_" + id, name)
                 putString("folder_apps_" + id, (folderApps[id] ?: mutableListOf()).joinToString("|"))
@@ -1383,7 +1393,15 @@ class MainActivity : Activity() {
                     try {
                         packageManager.getApplicationInfo(item, 0)
                         homePackages[page].add(item)
-                        homeGrids[page].addView(createHomeAppView(item, packageManager.getApplicationInfo(item, 0)))
+                        val view = createHomeAppView(item, packageManager.getApplicationInfo(item, 0))
+                        homeGrids[page].addView(view)
+                        val key = item.replace("/", "_")
+                        val savedX = prefs.getFloat("pos_" + page + "_" + key + "_x", Float.NaN)
+                        val savedY = prefs.getFloat("pos_" + page + "_" + key + "_y", Float.NaN)
+                        if (!savedX.isNaN() && !savedY.isNaN()) {
+                            view.translationX = savedX
+                            view.translationY = savedY
+                        }
                     } catch (_: Exception) {}
                 }
             }
