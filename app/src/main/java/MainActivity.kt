@@ -98,6 +98,8 @@ class MainActivity : Activity() {
     private var dragOffsetY = 0f
 
     private var lastAutoPageTime = 0L
+    private var movingTrashView: TextView? = null
+    private var settingsOverlay: View? = null
 
     private val prefsName = "launcher_layout"
 
@@ -111,6 +113,7 @@ class MainActivity : Activity() {
 
         window.statusBarColor = Color.TRANSPARENT
         window.navigationBarColor = Color.TRANSPARENT
+        window.setBackgroundDrawableResource(android.R.color.transparent)
 
         loadCustomization()
         loadFolderData()
@@ -175,25 +178,17 @@ class MainActivity : Activity() {
             touchStartY = event.rawY
         }
 
-        if (
-            event.actionMasked == MotionEvent.ACTION_UP &&
-            ::appDrawer.isInitialized &&
-            appDrawer.isVisible
-        ) {
+        if (event.actionMasked == MotionEvent.ACTION_UP) {
+            val deltaY = event.rawY - touchStartY
+            val deltaX = event.rawX - touchStartX
 
-            val deltaY =
-                event.rawY - touchStartY
-
-            val deltaX =
-                event.rawX - touchStartX
-
-            if (
-                !appScroll.canScrollVertically(-1) &&
-                deltaY > dp(120) &&
-                abs(deltaY) > abs(deltaX)
-            ) {
-
-                closeDrawer()
+            if (::appDrawer.isInitialized && appDrawer.isVisible) {
+                if (deltaY > dp(110) && abs(deltaY) > abs(deltaX) * 1.15f) {
+                    closeDrawer()
+                    return true
+                }
+            } else if (deltaY < -dp(140) && abs(deltaY) > abs(deltaX) * 1.15f) {
+                openDrawer()
                 return true
             }
         }
@@ -920,16 +915,15 @@ class MainActivity : Activity() {
                     )
                 }
 
-                // Tap = open app. Hold = remove from home.
-                // Handle the hold ourselves so Android's drag/long-press
-                // behavior cannot steal the gesture.
+                // Tap = open. Hold = pick up and drag anywhere.
                 var holdTriggered = false
                 var downX = 0f
                 var downY = 0f
+                val homeCell = this
 
                 val holdRunnable = Runnable {
                     holdTriggered = true
-                    removeFromHome(packageName)
+                    startMoving(homeCell, packageName)
                 }
 
                 setOnTouchListener { _, event ->
@@ -939,37 +933,29 @@ class MainActivity : Activity() {
                             downX = event.rawX
                             downY = event.rawY
                             removeCallbacks(holdRunnable)
-                            postDelayed(holdRunnable, 650L)
+                            postDelayed(holdRunnable, 600L)
                             true
                         }
-
                         MotionEvent.ACTION_MOVE -> {
-                            val movedX = kotlin.math.abs(event.rawX - downX)
-                            val movedY = kotlin.math.abs(event.rawY - downY)
-
-                            if (movedX > dp(20) || movedY > dp(20)) {
+                            val movedX = abs(event.rawX - downX)
+                            val movedY = abs(event.rawY - downY)
+                            if (!holdTriggered && (movedX > dp(18) || movedY > dp(18))) {
                                 removeCallbacks(holdRunnable)
                             }
-
                             true
                         }
-
                         MotionEvent.ACTION_UP -> {
                             removeCallbacks(holdRunnable)
-
-                            if (!holdTriggered) {
-                                animatePress(this)
+                            if (!holdTriggered && floatingView == null) {
+                                animatePress(homeCell)
                                 launchApp(packageName)
                             }
-
                             true
                         }
-
                         MotionEvent.ACTION_CANCEL -> {
                             removeCallbacks(holdRunnable)
                             true
                         }
-
                         else -> true
                     }
                 }
@@ -1113,6 +1099,26 @@ class MainActivity : Activity() {
 
         floatingView =
             floating
+
+        movingTrashView = TextView(this).apply {
+            text = "DROP TO REMOVE"
+            textSize = 13f
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            setPadding(dp(20), dp(12), dp(20), dp(12))
+            background = GradientDrawable().apply {
+                setColor("#CC8B1010".toColorInt())
+                cornerRadius = dp(24).toFloat()
+            }
+        }
+
+        root.addView(movingTrashView, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply {
+            gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+            bottomMargin = dp(32)
+        })
     }
 
     // ============================================================
