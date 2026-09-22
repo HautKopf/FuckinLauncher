@@ -897,8 +897,7 @@ class MainActivity : Activity() {
                 setPadding(
                     dp(8),
                     dp(12),
-                    dp(8),                    dp(12)
-                )
+                    dp(8),                    dp(12)                )
 
                 val cardBg =
                     GradientDrawable().apply {
@@ -925,6 +924,22 @@ class MainActivity : Activity() {
                 // This NEVER uninstalls the app.
                 setOnLongClickListener {
                     removeFromHome(packageName)
+                    true
+                }
+
+                val homeGesture = GestureDetector(this@MainActivity, object : GestureDetector.SimpleOnGestureListener() {
+                    override fun onDown(e: MotionEvent): Boolean = true
+                    override fun onSingleTapUp(e: MotionEvent): Boolean {
+                        launchApp(packageName)
+                        return true
+                    }
+                    override fun onLongPress(e: MotionEvent) {
+                        removeFromHome(packageName)
+                    }
+                })
+
+                setOnTouchListener { _, event ->
+                    homeGesture.onTouchEvent(event)
                     true
                 }
             }
