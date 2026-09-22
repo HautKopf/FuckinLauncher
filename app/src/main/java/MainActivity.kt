@@ -1978,5 +1978,3 @@ class MainActivity : Activity() {
     }
 
 }
-
-}
