@@ -897,8 +897,7 @@ class MainActivity : Activity() {
                 setPadding(
                     dp(8),
                     dp(12),
-                    dp(8),
-                    dp(12)
+                    dp(8),                    dp(12)
                 )
 
                 val cardBg =
@@ -922,10 +921,10 @@ class MainActivity : Activity() {
                     )
                 }
 
-                // HOLD APP = REMOVE FROM HOME
-                // Does NOT uninstall the app.
+                // HOLD APP = REMOVE IT FROM THE HOME SCREEN.
+                // This NEVER uninstalls the app.
                 setOnLongClickListener {
-                    showHomeItemMenu(packageName)
+                    removeFromHome(packageName)
                     true
                 }
             }
@@ -1745,8 +1744,7 @@ class MainActivity : Activity() {
                     if (
                         !gestureStarted &&
                         (
-                                abs(dx) > dp(30) ||
-                                        abs(dy) > dp(30)
+                                abs(dx) > dp(30)
                                 )
                     ) {
 
