@@ -920,27 +920,58 @@ class MainActivity : Activity() {
                     )
                 }
 
-                // HOLD APP = REMOVE IT FROM THE HOME SCREEN.
-                // This NEVER uninstalls the app.
-                setOnLongClickListener {
+                // Tap = open app. Hold = remove from home.
+                // Handle the hold ourselves so Android's drag/long-press
+                // behavior cannot steal the gesture.
+                var holdTriggered = false
+                var downX = 0f
+                var downY = 0f
+
+                val holdRunnable = Runnable {
+                    holdTriggered = true
                     removeFromHome(packageName)
-                    true
                 }
 
-                val homeGesture = GestureDetector(this@MainActivity, object : GestureDetector.SimpleOnGestureListener() {
-                    override fun onDown(e: MotionEvent): Boolean = true
-                    override fun onSingleTapUp(e: MotionEvent): Boolean {
-                        launchApp(packageName)
-                        return true
-                    }
-                    override fun onLongPress(e: MotionEvent) {
-                        removeFromHome(packageName)
-                    }
-                })
-
                 setOnTouchListener { _, event ->
-                    homeGesture.onTouchEvent(event)
-                    true
+                    when (event.actionMasked) {
+                        MotionEvent.ACTION_DOWN -> {
+                            holdTriggered = false
+                            downX = event.rawX
+                            downY = event.rawY
+                            removeCallbacks(holdRunnable)
+                            postDelayed(holdRunnable, 650L)
+                            true
+                        }
+
+                        MotionEvent.ACTION_MOVE -> {
+                            val movedX = kotlin.math.abs(event.rawX - downX)
+                            val movedY = kotlin.math.abs(event.rawY - downY)
+
+                            if (movedX > dp(20) || movedY > dp(20)) {
+                                removeCallbacks(holdRunnable)
+                            }
+
+                            true
+                        }
+
+                        MotionEvent.ACTION_UP -> {
+                            removeCallbacks(holdRunnable)
+
+                            if (!holdTriggered) {
+                                animatePress(this)
+                                launchApp(packageName)
+                            }
+
+                            true
+                        }
+
+                        MotionEvent.ACTION_CANCEL -> {
+                            removeCallbacks(holdRunnable)
+                            true
+                        }
+
+                        else -> true
+                    }
                 }
             }
 
