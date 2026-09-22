@@ -923,7 +923,7 @@ class MainActivity : Activity() {
 
                 val holdRunnable = Runnable {
                     holdTriggered = true
-                    startMoving(homeCell, packageName)
+                    removeFromHome(packageName)
                 }
 
                 setOnTouchListener { _, event ->
