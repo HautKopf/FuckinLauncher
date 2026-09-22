@@ -1925,6 +1925,7 @@ class MainActivity : Activity() {
 
             return false
         }
+    }
 
     private inner class HomeGrid(context: android.content.Context) : FrameLayout(context) {
         init {
