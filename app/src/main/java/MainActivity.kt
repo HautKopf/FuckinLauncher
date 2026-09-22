@@ -1177,99 +1177,63 @@ class MainActivity : Activity() {
     // DROP
     // ============================================================
 
-    private fun finishMoving(
-        rawX: Float,
-        rawY: Float
-    ) {
+    private fun finishMoving(rawX: Float, rawY: Float) {
+        val packageName = movingPackage ?: return
 
-        val packageName =
-            movingPackage
-                ?: return
+        val trash = movingTrashView
+        val tl = IntArray(2)
+        trash?.getLocationOnScreen(tl)
+        val inTrash = trash != null &&
+            rawX >= tl[0] && rawX <= tl[0] + trash.width &&
+            rawY >= tl[1] && rawY <= tl[1] + trash.height
 
-        val oldPage =
-            movingPage
+        floatingView?.let { root.removeView(it) }
+        movingTrashView?.let { root.removeView(it) }
+        floatingView = null
+        movingTrashView = null
 
-        val oldIndex =
-            movingOriginalIndex
-
-        floatingView?.let {
-            root.removeView(it)
+        val oldPage = movingPage
+        val oldIndex = movingOriginalIndex
+        if (oldPage !in 0 until pageCount) {
+            clearMovingState()
+            return
         }
 
-        floatingView =
-            null
+        if (oldIndex >= 0 && oldIndex < homeGrids[oldPage].childCount) {
+            homeGrids[oldPage].removeViewAt(oldIndex)
+        }
+        homePackages[oldPage].remove(packageName)
 
-        val targetPage =
-            currentPage
-
-        val oldGrid =
-            homeGrids[oldPage]
-
-        if (
-            oldIndex >= 0 &&
-            oldIndex < oldGrid.childCount
-        ) {
-
-            oldGrid.removeViewAt(
-                oldIndex
-            )
+        if (inTrash) {
+            saveHomeLayout()
+            Toast.makeText(this, "Removed from Home", Toast.LENGTH_SHORT).show()
+            clearMovingState()
+            return
         }
 
-        homePackages[oldPage]
-            .remove(packageName)
+        val targetPage = currentPage
+        val targetGrid = homeGrids[targetPage]
+        val app = packageManager.getApplicationInfo(packageName, 0)
+        val newView = createHomeAppView(packageName, app)
 
-        val targetGrid =
-            homeGrids[targetPage]
+        targetGrid.addView(newView, FrameLayout.LayoutParams(
+            dp(iconSizeDp + 28),
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        ))
+        homePackages[targetPage].add(packageName)
 
-        var targetIndex =
-            targetGrid.getDropIndex(
-                rawX,
-                rawY
-            )
-
-        if (
-            oldPage == targetPage &&
-            targetIndex > oldIndex
-        ) {
-
-            targetIndex--
+        targetGrid.post {
+            val gl = IntArray(2)
+            targetGrid.getLocationOnScreen(gl)
+            val maxX = (targetGrid.width - newView.width).coerceAtLeast(0)
+            val maxY = (targetGrid.height - newView.height).coerceAtLeast(0)
+            newView.translationX =
+                (rawX - gl[0] - newView.width / 2f).coerceIn(0f, maxX.toFloat())
+            newView.translationY =
+                (rawY - gl[1] - newView.height / 2f).coerceIn(0f, maxY.toFloat())
+            animateAddedView(newView)
+            saveHomeLayout()
         }
-
-        targetIndex =
-            targetIndex.coerceIn(
-                0,
-                homePackages[targetPage].size
-            )
-
-        homePackages[targetPage]
-            .add(
-                targetIndex,
-                packageName
-            )
-
-        val app =
-            packageManager.getApplicationInfo(
-                packageName,
-                0
-            )
-
-        val newView =
-            createHomeAppView(
-                packageName,
-                app
-            )
-
-        targetGrid.addView(
-            newView,
-            targetIndex
-        )
-
-        newView.visibility =
-            View.VISIBLE
-
-        targetGrid.requestLayout()
-
-        saveHomeLayout()
 
         clearMovingState()
     }
@@ -1280,15 +1244,11 @@ class MainActivity : Activity() {
 
     private fun cancelMoving() {
 
-        floatingView?.let {
-            root.removeView(it)
-        }
-
-        floatingView =
-            null
-
-        movingOriginalView?.visibility =
-            View.VISIBLE
+        floatingView?.let { root.removeView(it) }
+        movingTrashView?.let { root.removeView(it) }
+        floatingView = null
+        movingTrashView = null
+        movingOriginalView?.visibility = View.VISIBLE
 
         clearMovingState()
     }
@@ -1527,15 +1487,136 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun showCustomizationMenu(){
-        val options=arrayOf("Drawer columns: "+drawerGridColumns,"Icon size: "+iconSizeDp+"dp","App labels: "+if(showAppLabels)"On"else"Off","Drawer opacity: "+(drawerAlpha*100).toInt()+"%","Home screens: "+pageCount)
-        AlertDialog.Builder(this).setTitle("Fuckin Launcher").setItems(options){_,which->when(which){
-            0->chooseDrawerColumns()
-            1->chooseIconSize()
-            2->{showAppLabels=!showAppLabels;saveHomeLayout();rebuildHomeViews();populateApps()}
-            3->chooseDrawerOpacity()
-            4->choosePageCount()
-        }}.show()
+    private fun showCustomizationMenu() {
+        settingsOverlay?.let { root.removeView(it) }
+
+        val overlay = FrameLayout(this).apply {
+            setBackgroundColor("#E6121218".toColorInt())
+            elevation = dp(30).toFloat()
+        }
+
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(24), dp(22), dp(28))
+            background = GradientDrawable().apply {
+                setColor("#F0181820".toColorInt())
+                cornerRadius = dp(28).toFloat()
+                setStroke(dp(1), "#44FFFFFF".toColorInt())
+            }
+        }
+
+        val panelParams = FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT
+        ).apply { setMargins(dp(12), dp(28), dp(12), dp(28)) }
+
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        val title = TextView(this).apply {
+            text = "FUCKIN CONTROL DECK"
+            textSize = 22f
+            setTextColor(Color.WHITE)
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+        }
+
+        val close = TextView(this).apply {
+            text = "✕"
+            textSize = 26f
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            setOnClickListener { closeSettingsOverlay() }
+        }
+
+        header.addView(title, LinearLayout.LayoutParams(0, dp(52), 1f))
+        header.addView(close, LinearLayout.LayoutParams(dp(52), dp(52)))
+        panel.addView(header)
+
+        panel.addView(TextView(this).apply {
+            text = "YOUR LAUNCHER. YOUR LAYOUT. NO ONE UI SHIT."
+            textSize = 11f
+            setTextColor("#99FFFFFF".toColorInt())
+            setPadding(0, 0, 0, dp(18))
+        })
+
+        val scroll = ScrollView(this)
+        val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+
+        fun section(name: String) {
+            content.addView(TextView(this).apply {
+                text = name
+                textSize = 13f
+                setTextColor("#FF8FE8FF".toColorInt())
+                setPadding(dp(4), dp(16), dp(4), dp(7))
+            })
+        }
+
+        fun row(label: String, value: String, action: () -> Unit) {
+            val r = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(16), dp(5), dp(10), dp(5))
+                background = GradientDrawable().apply {
+                    setColor("#18FFFFFF".toColorInt())
+                    cornerRadius = dp(16).toFloat()
+                }
+                setOnClickListener { action() }
+            }
+            r.addView(TextView(this).apply {
+                text = label
+                textSize = 16f
+                setTextColor(Color.WHITE)
+            }, LinearLayout.LayoutParams(0, dp(54), 1f))
+            r.addView(TextView(this).apply {
+                text = value
+                textSize = 13f
+                setTextColor("#AAFFFFFF".toColorInt())
+            }, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, dp(54)
+            ))
+            content.addView(r, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(64)
+            ).apply { bottomMargin = dp(8) })
+        }
+
+        section("HOME")
+        row("Home screens", "$pageCount pages") { choosePageCount() }
+        row("App icon size", "$iconSizeDp dp") { chooseIconSize() }
+        row("App names", if (showAppLabels) "ON" else "OFF") {
+            showAppLabels = !showAppLabels
+            saveHomeLayout()
+            rebuildHomeViews()
+            closeSettingsOverlay()
+            showCustomizationMenu()
+        }
+
+        section("APP DRAWER")
+        row("Drawer columns", "$drawerGridColumns columns") { chooseDrawerColumns() }
+        row("Drawer opacity", "${(drawerAlpha * 100).toInt()}%") { chooseDrawerOpacity() }
+
+        section("GESTURES")
+        row("Move apps", "HOLD + DRAG ANYWHERE") { closeSettingsOverlay() }
+        row("Remove an app", "DRAG TO REMOVE") { closeSettingsOverlay() }
+        row("Open drawer", "SWIPE UP") { closeSettingsOverlay() }
+        row("Close drawer", "SWIPE DOWN") { closeSettingsOverlay() }
+
+        scroll.addView(content)
+        panel.addView(scroll, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f
+        ))
+        overlay.addView(panel, panelParams)
+        root.addView(overlay, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT
+        ))
+        settingsOverlay = overlay
+    }
+
+    private fun closeSettingsOverlay() {
+        settingsOverlay?.let { root.removeView(it) }
+        settingsOverlay = null
     }
 
     private fun chooseDrawerColumns(){val values=arrayOf("4 columns","5 columns","6 columns");AlertDialog.Builder(this).setTitle("App drawer columns").setItems(values){_,which->drawerGridColumns=which+4;saveHomeLayout();populateApps()}.show()}
@@ -1708,6 +1789,13 @@ class MainActivity : Activity() {
             .start()
     }
 
+    @Deprecated("Use OnBackInvokedDispatcher on newer Android")
+    override fun onBackPressed() {
+        if (settingsOverlay != null) { closeSettingsOverlay(); return }
+        if (::appDrawer.isInitialized && appDrawer.isVisible) { closeDrawer(); return }
+        super.onBackPressed()
+    }
+
     // ============================================================
     // NOTIFICATIONS
     // ============================================================
@@ -1819,3 +1907,55 @@ class MainActivity : Activity() {
 
             return false
         }
+
+    private inner class HomeGrid(context: android.content.Context) : FrameLayout(context) {
+        init {
+            setBackgroundColor(Color.TRANSPARENT)
+            clipChildren = false
+            clipToPadding = false
+        }
+
+        fun getDropIndex(rawX: Float, rawY: Float): Int {
+            if (childCount == 0) return 0
+            var best = childCount
+            var bestDistance = Float.MAX_VALUE
+            val loc = IntArray(2)
+            getLocationOnScreen(loc)
+            for (i in 0 until childCount) {
+                val child = getChildAt(i)
+                val dx = loc[0] + child.x + child.width / 2f - rawX
+                val dy = loc[1] + child.y + child.height / 2f - rawY
+                val distance = dx * dx + dy * dy
+                if (distance < bestDistance) {
+                    bestDistance = distance
+                    best = i
+                }
+            }
+            return best
+        }
+
+        override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+            setMeasuredDimension(
+                MeasureSpec.getSize(widthMeasureSpec),
+                MeasureSpec.getSize(heightMeasureSpec)
+            )
+            for (i in 0 until childCount) {
+                measureChild(getChildAt(i), widthMeasureSpec, heightMeasureSpec)
+            }
+        }
+
+        override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
+            for (i in 0 until childCount) {
+                val child = getChildAt(i)
+                child.layout(0, 0, child.measuredWidth, child.measuredHeight)
+                if (child.translationX == 0f && child.translationY == 0f) {
+                    val col = i % 4
+                    val row = i / 4
+                    child.translationX = dp(8 + col * (iconSizeDp + 36)).toFloat()
+                    child.translationY = dp(18 + row * (iconSizeDp + 62)).toFloat()
+                }
+            }
+        }
+    }
+
+}
