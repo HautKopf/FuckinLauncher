@@ -915,50 +915,12 @@ class MainActivity : Activity() {
                     )
                 }
 
-                // Tap = open. Hold = pick up and drag anywhere.
-                var holdTriggered = false
-                var downX = 0f
-                var downY = 0f
-                val homeCell = this
-
-                val holdRunnable = Runnable {
-                    holdTriggered = true
+                // Tap = open. Hold = remove from Home.
+                setOnLongClickListener {
                     removeFromHome(packageName)
+                    true
                 }
 
-                setOnTouchListener { _, event ->
-                    when (event.actionMasked) {
-                        MotionEvent.ACTION_DOWN -> {
-                            holdTriggered = false
-                            downX = event.rawX
-                            downY = event.rawY
-                            removeCallbacks(holdRunnable)
-                            postDelayed(holdRunnable, 600L)
-                            true
-                        }
-                        MotionEvent.ACTION_MOVE -> {
-                            val movedX = abs(event.rawX - downX)
-                            val movedY = abs(event.rawY - downY)
-                            if (!holdTriggered && (movedX > dp(18) || movedY > dp(18))) {
-                                removeCallbacks(holdRunnable)
-                            }
-                            true
-                        }
-                        MotionEvent.ACTION_UP -> {
-                            removeCallbacks(holdRunnable)
-                            if (!holdTriggered && floatingView == null) {
-                                animatePress(homeCell)
-                                launchApp(packageName)
-                            }
-                            true
-                        }
-                        MotionEvent.ACTION_CANCEL -> {
-                            removeCallbacks(holdRunnable)
-                            true
-                        }
-                        else -> true
-                    }
-                }
             }
 
         addAppIconAndName(
