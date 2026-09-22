@@ -61,6 +61,12 @@ class MainActivity : Activity() {
 
     private var pageCount = 3
     private var drawerGridColumns = 4
+    private var iconSizeDp = 64
+    private var showAppLabels = true
+    private var drawerAlpha = 0.94f
+
+    private val folderNames = mutableMapOf<String, String>()
+    private val folderApps = mutableMapOf<String, MutableList<String>>()
 
     private val timeHandler = Handler(Looper.getMainLooper())
 
@@ -106,6 +112,8 @@ class MainActivity : Activity() {
         window.statusBarColor = Color.TRANSPARENT
         window.navigationBarColor = Color.TRANSPARENT
 
+        loadCustomization()
+        loadFolderData()
         buildLauncher()
         loadHomeLayout()
 
@@ -498,7 +506,6 @@ class MainActivity : Activity() {
     // ============================================================
     // APP DRAWER
     // ============================================================
-
     @SuppressLint("SetTextI18n")
     private fun buildDrawer() {
 
@@ -508,7 +515,8 @@ class MainActivity : Activity() {
                 orientation =
                     LinearLayout.VERTICAL
 
-                setBackgroundColor(Color.BLACK)
+                setBackgroundColor(Color.argb((drawerAlpha * 255).toInt(), 0, 0, 0))
+                alpha = 0f
             }
 
         val header =
@@ -537,49 +545,7 @@ class MainActivity : Activity() {
 
                 setTextColor(Color.WHITE)
 
-                setOnClickListener {
-
-                    val items =
-                        arrayOf(
-                            "3 Pages",
-                            "4 Pages",
-                            "5 Pages",
-                            "6 Pages"
-                        )
-
-                    AlertDialog.Builder(
-                        this@MainActivity
-                    )
-                        .setTitle(
-                            "Configure Home Screens"
-                        )
-                        .setItems(
-                            items
-                        ) { _, which ->
-
-                            val newCount =
-                                which + 3
-
-                            if (
-                                newCount != pageCount
-                            ) {
-
-                                pageCount =
-                                    newCount
-
-                                buildLauncher()
-                                loadHomeLayout()
-
-                                Toast.makeText(
-                                    this@MainActivity,
-                                    "Workspace updated to $pageCount pages!",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            }
-
-                        }
-                        .show()
-                }
+                setOnClickListener { showCustomizationMenu() }
             }
 
         val settingsButton =
@@ -598,38 +564,7 @@ class MainActivity : Activity() {
 
                 setColorFilter(Color.WHITE)
 
-                setOnClickListener {
-
-                    val subOptions =
-                        arrayOf(
-                            "4 Columns Grid",
-                            "5 Columns Grid",
-                            "6 Columns Grid"
-                        )
-
-                    AlertDialog.Builder(
-                        this@MainActivity
-                    )
-                        .setTitle(
-                            "App Drawer Sizing Columns"
-                        )
-                        .setItems(
-                            subOptions
-                        ) { _, whichGrid ->
-
-                            drawerGridColumns =
-                                whichGrid + 4
-
-                            populateApps()
-
-                            Toast.makeText(
-                                this@MainActivity,
-                                "App Grid updated to $drawerGridColumns columns!",
-                                Toast.LENGTH_SHORT
-                            ).show()
-                        }
-                        .show()
-                }
+                setOnClickListener { showCustomizationMenu() }
             }
 
         header.addView(
@@ -863,10 +798,8 @@ class MainActivity : Activity() {
                     )
 
                     setOnClickListener {
-
-                        launchApp(
-                            app.packageName
-                        )
+                        animatePress(this)
+                        launchApp(app.packageName)
                     }
 
                     setOnLongClickListener {
@@ -934,11 +867,9 @@ class MainActivity : Activity() {
                 )
             )
 
-        homeGrids[currentPage]
-            .requestLayout()
-
+        homeGrids[currentPage].requestLayout()
+        animateAddedView(homeGrids[currentPage].getChildAt(homeGrids[currentPage].childCount - 1))
         saveHomeLayout()
-
         closeDrawer()
     }
 
@@ -994,11 +925,7 @@ class MainActivity : Activity() {
                 // HOLD APP = REMOVE FROM HOME
                 // Does NOT uninstall the app.
                 setOnLongClickListener {
-
-                    removeFromHome(
-                        packageName
-                    )
-
+                    showHomeItemMenu(packageName)
                     true
                 }
             }
@@ -1044,9 +971,8 @@ class MainActivity : Activity() {
                         .removeViewAt(index)
                 }
 
-                homeGrids[page]
-                    .requestLayout()
-
+                homeGrids[page].requestLayout()
+                animateHomeRefresh(homeGrids[page])
                 removed =
                     true
             }
@@ -1363,57 +1289,28 @@ class MainActivity : Activity() {
 
     private fun addAppIconAndName(
         cell: LinearLayout,
-        app: ApplicationInfo
+        app: ApplicationInfo,
+        sizeDp: Int = iconSizeDp
     ) {
-
-        val icon =
-            ImageView(this).apply {
-
-                setImageDrawable(
-                    app.loadIcon(
-                        packageManager
-                    )
-                )
-
-                scaleType =
-                    ImageView.ScaleType.FIT_CENTER
+        val icon = ImageView(this).apply {
+            setImageDrawable(app.loadIcon(packageManager))
+            scaleType = ImageView.ScaleType.FIT_CENTER
+        }
+        cell.addView(icon, LinearLayout.LayoutParams(dp(sizeDp), dp(sizeDp)))
+        if (showAppLabels) {
+            val name = TextView(this).apply {
+                text = app.loadLabel(packageManager).toString()
+                textSize = 12f
+                setTextColor(Color.WHITE)
+                gravity = Gravity.CENTER
+                maxLines = 2
+                ellipsize = android.text.TextUtils.TruncateAt.END
             }
-
-        cell.addView(
-            icon,
-            LinearLayout.LayoutParams(
-                dp(64),
-                dp(64)
-            )
-        )
-
-        val name =
-            TextView(this).apply {
-
-                text =
-                    app.loadLabel(
-                        packageManager
-                    ).toString()
-
-                textSize =
-                    12f
-
-                setTextColor(
-                    Color.WHITE
-                )
-
-                gravity =
-                    Gravity.CENTER
-
-                maxLines =
-                    2
-
-                ellipsize =
-                    android.text.TextUtils
-                        .TruncateAt.END
-            }
-
-        cell.addView(name)
+            cell.addView(name, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ))
+        }
     }
 
     // ============================================================
@@ -1421,22 +1318,38 @@ class MainActivity : Activity() {
     // ============================================================
 
     private fun saveHomeLayout() {
-
-        getSharedPreferences(
-            prefsName,
-            MODE_PRIVATE
-        ).edit {
-
-            for (
-            page in 0 until pageCount
-            ) {
-
-                putString(
-                    "page_$page",
-                    homePackages[page]
-                        .joinToString("|")
-                )
+        getSharedPreferences(prefsName, MODE_PRIVATE).edit {
+            for (page in 0 until pageCount) putString("page_" + page, homePackages[page].joinToString("|"))
+            for ((id, name) in folderNames) {
+                putString("folder_name_" + id, name)
+                putString("folder_apps_" + id, (folderApps[id] ?: mutableListOf()).joinToString("|"))
             }
+            putInt("page_count", pageCount)
+            putInt("drawer_columns", drawerGridColumns)
+            putInt("icon_size", iconSizeDp)
+            putBoolean("show_labels", showAppLabels)
+            putFloat("drawer_alpha", drawerAlpha)
+        }
+    }
+
+    private fun loadCustomization() {
+        val prefs = getSharedPreferences(prefsName, MODE_PRIVATE)
+        pageCount = prefs.getInt("page_count", 3).coerceIn(3, 6)
+        drawerGridColumns = prefs.getInt("drawer_columns", 4).coerceIn(4, 6)
+        iconSizeDp = prefs.getInt("icon_size", 64).coerceIn(48, 80)
+        showAppLabels = prefs.getBoolean("show_labels", true)
+        drawerAlpha = prefs.getFloat("drawer_alpha", 0.94f).coerceIn(0.70f, 1f)
+    }
+
+    private fun loadFolderData() {
+        val prefs = getSharedPreferences(prefsName, MODE_PRIVATE)
+        folderNames.clear()
+        folderApps.clear()
+        for ((key, value) in prefs.all) if (key.startsWith("folder_name_")) {
+            val id = key.removePrefix("folder_name_")
+            folderNames[id] = value?.toString() ?: "Folder"
+            folderApps[id] = (prefs.getString("folder_apps_" + id, "") ?: "").split("|")
+                .filter { it.isNotBlank() }.toMutableList()
         }
     }
 
@@ -1445,75 +1358,144 @@ class MainActivity : Activity() {
     // ============================================================
 
     private fun loadHomeLayout() {
-
-        val prefs =
-            getSharedPreferences(
-                prefsName,
-                MODE_PRIVATE
-            )
-
-        for (
-        page in 0 until pageCount
-        ) {
-
-            val saved =
-                prefs.getString(
-                    "page_$page",
-                    ""
-                ) ?: ""
-
-            if (saved.isEmpty()) {
-                continue
-            }
-
-            val packages =
-                saved
-                    .split("|")
-                    .filter { pkg ->
-
-                        try {
-
-                            packageManager
-                                .getApplicationInfo(
-                                    pkg,
-                                    0
-                                )
-
-                            true
-
-                        } catch (
-                            _: Exception
-                        ) {
-
-                            false
-                        }
-                    }
-
-            homePackages[page]
-                .addAll(packages)
-
-            for (
-            packageName
-            in homePackages[page]
-            ) {
-
-                val app =
-                    packageManager
-                        .getApplicationInfo(
-                            packageName,
-                            0
-                        )
-
-                homeGrids[page]
-                    .addView(
-                        createHomeAppView(
-                            packageName,
-                            app
-                        )
-                    )
+        val prefs = getSharedPreferences(prefsName, MODE_PRIVATE)
+        for (page in 0 until pageCount) {
+            val saved = prefs.getString("page_" + page, "") ?: ""
+            if (saved.isEmpty()) continue
+            for (item in saved.split("|").filter { it.isNotBlank() }) {
+                if (item.startsWith("folder:")) {
+                    val id = item.removePrefix("folder:")
+                    if (!folderNames.containsKey(id)) continue
+                    homePackages[page].add(item)
+                    homeGrids[page].addView(createFolderView(id))
+                } else {
+                    try {
+                        packageManager.getApplicationInfo(item, 0)
+                        homePackages[page].add(item)
+                        homeGrids[page].addView(createHomeAppView(item, packageManager.getApplicationInfo(item, 0)))
+                    } catch (_: Exception) {}
+                }
             }
         }
     }
+
+    // ============================================================
+    // EDITING / FOLDERS / CUSTOMIZATION
+    // ============================================================
+
+    private fun showHomeItemMenu(itemId: String) {
+        if (itemId.startsWith("folder:")) { showFolderMenu(itemId.removePrefix("folder:")); return }
+        val pages = (0 until pageCount).map { "Page " + (it + 1) }.toTypedArray()
+        AlertDialog.Builder(this).setTitle("Edit Home App")
+            .setItems(arrayOf("Remove from Home","Move to page...","Create folder with this app")) { _, which ->
+                when (which) {
+                    0 -> removeFromHome(itemId)
+                    1 -> AlertDialog.Builder(this).setTitle("Move to page").setItems(pages) { _, page -> moveItemToPage(itemId,page) }.show()
+                    2 -> createFolder(itemId)
+                }
+            }.show()
+    }
+
+    private fun moveItemToPage(itemId:String,targetPage:Int) {
+        val sourcePage=findItemPage(itemId)
+        if(sourcePage<0||sourcePage==targetPage)return
+        val index=homePackages[sourcePage].indexOf(itemId)
+        homePackages[sourcePage].removeAt(index); homeGrids[sourcePage].removeViewAt(index)
+        homePackages[targetPage].add(itemId)
+        homeGrids[targetPage].addView(if(itemId.startsWith("folder:")) createFolderView(itemId.removePrefix("folder:")) else createHomeAppView(itemId,packageManager.getApplicationInfo(itemId,0)))
+        animateHomeRefresh(homeGrids[sourcePage]); animateAddedView(homeGrids[targetPage].getChildAt(homeGrids[targetPage].childCount-1)); saveHomeLayout()
+    }
+
+    private fun createFolder(itemId:String) {
+        val input=EditText(this).apply{hint="Folder name";setSingleLine(true);setPadding(dp(18),dp(12),dp(18),dp(12))}
+        AlertDialog.Builder(this).setTitle("Create folder").setView(input)
+            .setPositiveButton("Create"){_,_-> 
+                val name=input.text.toString().trim().ifEmpty{"New Folder"}; val id=System.currentTimeMillis().toString()
+                folderNames[id]=name; folderApps[id]=mutableListOf(itemId)
+                val page=findItemPage(itemId); val index=if(page>=0)homePackages[page].indexOf(itemId)else-1
+                if(page>=0&&index>=0){homePackages[page][index]="folder:"+id;homeGrids[page].removeViewAt(index);homeGrids[page].addView(createFolderView(id),index);animateAddedView(homeGrids[page].getChildAt(index))}
+                saveHomeLayout()
+            }.setNegativeButton("Cancel",null).show()
+    }
+
+    private fun showFolderMenu(folderId:String) {
+        val apps=folderApps[folderId]?:mutableListOf(); val name=folderNames[folderId]?:"Folder"
+        val labels=apps.mapNotNull{try{packageManager.getApplicationInfo(it,0).loadLabel(packageManager).toString()}catch(_:Exception){null}}.toTypedArray()
+        AlertDialog.Builder(this).setTitle(name)
+            .setItems(labels.ifEmpty{arrayOf("Folder is empty")}){_,i->if(i<apps.size)launchApp(apps[i])}
+            .setPositiveButton("Add apps"){_,_->showAddAppsToFolder(folderId)}
+            .setNeutralButton("Rename"){_,_->renameFolder(folderId)}
+            .setNegativeButton("Delete folder"){_,_->deleteFolder(folderId)}.show()
+    }
+
+    private fun showAddAppsToFolder(folderId:String) {
+        val folder=folderApps.getOrPut(folderId){mutableListOf()}
+        val installed=packageManager.getInstalledApplications(0).filter{it.enabled&&it.packageName!=packageName&&packageManager.getLaunchIntentForPackage(it.packageName)!=null}.sortedBy{it.loadLabel(packageManager).toString().lowercase()}
+        val labels=installed.map{it.loadLabel(packageManager).toString()}.toTypedArray()
+        val checked=BooleanArray(installed.size){folder.contains(installed[it].packageName)}
+        AlertDialog.Builder(this).setTitle("Apps in "+(folderNames[folderId]?:"Folder"))
+            .setMultiChoiceItems(labels,checked){_,which,on->val p=installed[which].packageName;if(on){if(!folder.contains(p))folder.add(p)}else folder.remove(p)}
+            .setPositiveButton("Done"){_,_->saveHomeLayout();rebuildHomeViews()}.setNegativeButton("Cancel",null).show()
+    }
+
+    private fun renameFolder(folderId:String) {
+        val input=EditText(this).apply{setText(folderNames[folderId]?:"Folder");setSingleLine(true);setPadding(dp(18),dp(12),dp(18),dp(12))}
+        AlertDialog.Builder(this).setTitle("Rename folder").setView(input).setPositiveButton("Save"){_,_->folderNames[folderId]=input.text.toString().trim().ifEmpty{"Folder"};rebuildHomeViews();saveHomeLayout()}.setNegativeButton("Cancel",null).show()
+    }
+
+    private fun deleteFolder(folderId:String) {
+        for(page in 0 until pageCount){val i=homePackages[page].indexOf("folder:"+folderId);if(i>=0){homePackages[page].removeAt(i);homeGrids[page].removeViewAt(i)}}
+        folderNames.remove(folderId);folderApps.remove(folderId);saveHomeLayout()
+    }
+
+    private fun createFolderView(folderId:String):View {
+        val cell=LinearLayout(this).apply{
+            tag="folder:"+folderId;orientation=LinearLayout.VERTICAL;gravity=Gravity.CENTER;setPadding(dp(8),dp(12),dp(8),dp(12))
+            background=GradientDrawable().apply{setColor(ColorUtils.setAlphaComponent(themePrimaryColor,0x26));cornerRadius=dp(18).toFloat()}
+            setOnClickListener{animatePress(this);showFolderMenu(folderId)}
+            setOnLongClickListener{showHomeItemMenu("folder:"+folderId);true}
+        }
+        val preview=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER}
+        (folderApps[folderId]?:mutableListOf()).take(4).forEach{pkg->try{val icon=ImageView(this).apply{setImageDrawable(packageManager.getApplicationInfo(pkg,0).loadIcon(packageManager));scaleType=ImageView.ScaleType.FIT_CENTER};preview.addView(icon,LinearLayout.LayoutParams(dp(30),dp(30)))}catch(_:Exception){}}
+        if((folderApps[folderId]?:mutableListOf()).isEmpty()){preview.addView(TextView(this).apply{text="+";textSize=30f;setTextColor(themePrimaryColor);gravity=Gravity.CENTER},LinearLayout.LayoutParams(dp(64),dp(48)))}
+        cell.addView(preview)
+        if(showAppLabels)cell.addView(TextView(this).apply{text=folderNames[folderId]?:"Folder";textSize=12f;setTextColor(Color.WHITE);gravity=Gravity.CENTER;maxLines=1;ellipsize=android.text.TextUtils.TruncateAt.END})
+        return cell
+    }
+
+    private fun findItemPage(itemId:String):Int{for(page in 0 until pageCount)if(homePackages[page].contains(itemId))return page;return -1}
+
+    private fun rebuildHomeViews(){
+        for(page in 0 until pageCount){
+            homeGrids[page].removeAllViews()
+            for(item in homePackages[page]){
+                if(item.startsWith("folder:"))homeGrids[page].addView(createFolderView(item.removePrefix("folder:")))
+                else try{homeGrids[page].addView(createHomeAppView(item,packageManager.getApplicationInfo(item,0)))}catch(_:Exception){}
+            }
+            animateHomeRefresh(homeGrids[page])
+        }
+    }
+
+    private fun showCustomizationMenu(){
+        val options=arrayOf("Drawer columns: "+drawerGridColumns,"Icon size: "+iconSizeDp+"dp","App labels: "+if(showAppLabels)"On"else"Off","Drawer opacity: "+(drawerAlpha*100).toInt()+"%","Home screens: "+pageCount)
+        AlertDialog.Builder(this).setTitle("Fuckin Launcher").setItems(options){_,which->when(which){
+            0->chooseDrawerColumns()
+            1->chooseIconSize()
+            2->{showAppLabels=!showAppLabels;saveHomeLayout();rebuildHomeViews();populateApps()}
+            3->chooseDrawerOpacity()
+            4->choosePageCount()
+        }}.show()
+    }
+
+    private fun chooseDrawerColumns(){val values=arrayOf("4 columns","5 columns","6 columns");AlertDialog.Builder(this).setTitle("App drawer columns").setItems(values){_,which->drawerGridColumns=which+4;saveHomeLayout();populateApps()}.show()}
+    private fun chooseIconSize(){val values=arrayOf("Small — 48dp","Medium — 56dp","Large — 64dp","Huge — 72dp","Massive — 80dp");val sizes=intArrayOf(48,56,64,72,80);AlertDialog.Builder(this).setTitle("Icon size").setItems(values){_,which->iconSizeDp=sizes[which];saveHomeLayout();rebuildHomeViews();populateApps()}.show()}
+    private fun chooseDrawerOpacity(){val values=arrayOf("70%","80%","90%","94%","100%");val a=floatArrayOf(.70f,.80f,.90f,.94f,1f);AlertDialog.Builder(this).setTitle("Drawer opacity").setItems(values){_,which->drawerAlpha=a[which];appDrawer.setBackgroundColor(Color.argb((drawerAlpha*255).toInt(),0,0,0));saveHomeLayout()}.show()}
+    private fun choosePageCount(){val values=arrayOf("3 pages","4 pages","5 pages","6 pages");AlertDialog.Builder(this).setTitle("Home screens").setItems(values){_,which->{val n=which+3;if(n!=pageCount){pageCount=n;saveHomeLayout();rebuildLauncherSmooth()}}}.show()}
+
+    private fun animatePress(view:View){view.animate().cancel();view.animate().scaleX(.94f).scaleY(.94f).setDuration(80).withEndAction{view.animate().scaleX(1f).scaleY(1f).setDuration(140).start()}.start()}
+    private fun animateAddedView(view:View?){view?:return;view.alpha=0f;view.scaleX=.86f;view.scaleY=.86f;view.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(220).setInterpolator(android.view.animation.DecelerateInterpolator()).start()}
+    private fun animateHomeRefresh(view:View){view.animate().cancel();view.alpha=.65f;view.animate().alpha(1f).setDuration(180).setInterpolator(android.view.animation.DecelerateInterpolator()).start()}
+    private fun rebuildLauncherSmooth(){root.animate().alpha(.35f).setDuration(100).withEndAction{buildLauncher();loadHomeLayout();root.animate().alpha(1f).setDuration(220).start()}.start()}
 
     // ============================================================
     // LAUNCH
@@ -1553,11 +1535,8 @@ class MainActivity : Activity() {
             resources.displayMetrics
                 .widthPixels
 
-        homeContainer.smoothScrollTo(
-            screenWidth * currentPage,
-            0
-        )
-
+        homeContainer.smoothScrollTo(screenWidth*currentPage,0)
+        pageIndicator.animate().alpha(.45f).setDuration(90).withEndAction{pageIndicator.animate().alpha(1f).setDuration(180).start()}.start()
         updatePageIndicator()
     }
 
@@ -1649,14 +1628,10 @@ class MainActivity : Activity() {
             return
         }
 
-        appDrawer.visibility =
-            View.VISIBLE
-
-        appDrawer.animate()
-            .translationY(0f)
-            .setDuration(300)
-            .setListener(null)
-            .start()
+        appDrawer.visibility=View.VISIBLE
+        appDrawer.alpha=0f
+        appDrawer.translationY=appDrawer.height.toFloat()*.12f
+        appDrawer.animate().translationY(0f).alpha(1f).setDuration(260).setInterpolator(android.view.animation.DecelerateInterpolator()).setListener(null).start()
     }
 
     private fun closeDrawer() {
@@ -1665,12 +1640,7 @@ class MainActivity : Activity() {
             return
         }
 
-        appDrawer.animate()
-            .translationY(
-                appDrawer.height.toFloat()
-            )
-            .setDuration(300)
-            .setListener(
+        appDrawer.animate().translationY(appDrawer.height.toFloat()*.12f).alpha(0f).setDuration(220).setInterpolator(android.view.animation.AccelerateDecelerateInterpolator()).setListener(
                 object :
                     AnimatorListenerAdapter() {
 
@@ -1678,8 +1648,9 @@ class MainActivity : Activity() {
                         animation: Animator
                     ) {
 
-                        appDrawer.visibility =
-                            View.INVISIBLE
+                        appDrawer.visibility=View.INVISIBLE
+                        appDrawer.alpha=1f
+                        appDrawer.translationY=appDrawer.height.toFloat()
                     }
                 }
             )
@@ -1798,329 +1769,3 @@ class MainActivity : Activity() {
 
             return false
         }
-
-        override fun onTouchEvent(
-            event: MotionEvent
-        ): Boolean {
-
-            when (
-                event.actionMasked
-            ) {
-
-                MotionEvent.ACTION_DOWN -> {
-
-                    downX =
-                        event.x
-
-                    downY =
-                        event.y
-
-                    return true
-                }
-
-                MotionEvent.ACTION_UP -> {
-
-                    val dx =
-                        event.x - downX
-
-                    val dy =
-                        event.y - downY
-
-                    val ax =
-                        abs(dx)
-
-                    val ay =
-                        abs(dy)
-
-                    gestureStarted =
-                        false
-
-                    when {
-
-                        dy < -dp(100) &&
-                                ay > ax -> {
-
-                            openDrawer()
-
-                            return true
-                        }
-
-                        dy > dp(100) &&
-                                ay > ax -> {
-
-                            expandNotificationsPanel()
-
-                            return true
-                        }
-
-                        dx < -dp(100) &&
-                                ax > ay -> {
-
-                            goToPage(
-                                currentPage + 1
-                            )
-
-                            return true
-                        }
-
-                        dx > dp(100) &&
-                                ax > ay -> {
-
-                            goToPage(
-                                currentPage - 1
-                            )
-
-                            return true
-                        }
-                    }
-
-                    return true
-                }
-
-                MotionEvent.ACTION_CANCEL -> {
-
-                    gestureStarted =
-                        false
-
-                    return true
-                }
-            }
-
-            return true
-        }
-    }
-
-    // ============================================================
-    // CUSTOM HOME GRID
-    // ============================================================
-
-    private inner class HomeGrid(
-        context: android.content.Context
-    ) : ViewGroup(context) {
-
-        private val columns =
-            4
-
-        private val horizontalPadding =
-            dp(12)
-
-        private val verticalPadding =
-            dp(30)
-
-        private val columnGap =
-            dp(2)
-
-        private val rowGap =
-            dp(4)
-
-        override fun onMeasure(
-            widthMeasureSpec: Int,
-            heightMeasureSpec: Int
-        ) {
-
-            val width =
-                MeasureSpec.getSize(
-                    widthMeasureSpec
-                )
-
-            val cellWidth =
-                (
-                        width -
-                                horizontalPadding * 2 -
-                                columnGap *
-                                (columns - 1)
-                        ) / columns
-
-            for (
-            i in 0 until childCount
-            ) {
-
-                val child =
-                    getChildAt(i)
-
-                child.measure(
-                    MeasureSpec.makeMeasureSpec(
-                        cellWidth,
-                        MeasureSpec.EXACTLY
-                    ),
-                    MeasureSpec.makeMeasureSpec(
-                        dp(105),
-                        MeasureSpec.EXACTLY
-                    )
-                )
-            }
-
-            val rows =
-                if (isEmpty()) {
-                    0
-                } else {
-                    (
-                            childCount +
-                                    columns -
-                                    1
-                            ) / columns
-                }
-
-            val neededHeight =
-                verticalPadding * 2 +
-                        rows * dp(105) +
-                        (
-                                rows - 1
-                                ).coerceAtLeast(0) *
-                        rowGap
-
-            val finalHeight =
-                maxOf(
-                    MeasureSpec.getSize(
-                        heightMeasureSpec
-                    ),
-                    neededHeight
-                )
-
-            setMeasuredDimension(
-                width,
-                finalHeight
-            )
-        }
-
-        override fun onLayout(
-            changed: Boolean,
-            left: Int,
-            top: Int,
-            right: Int,
-            bottom: Int
-        ) {
-
-            val availableWidth =
-                width -
-                        horizontalPadding * 2 -
-                        columnGap *
-                        (columns - 1)
-
-            val cellWidth =
-                availableWidth /
-                        columns
-
-            val cellHeight =
-                dp(105)
-
-            for (
-            i in 0 until childCount
-            ) {
-
-                val child =
-                    getChildAt(i)
-
-                val column =
-                    i % columns
-
-                val row =
-                    i / columns
-
-                val childLeft =
-                    horizontalPadding +
-                            column *
-                            (
-                                    cellWidth +
-                                            columnGap
-                                    )
-
-                val childTop =
-                    verticalPadding +
-                            row *
-                            (
-                                    cellHeight +
-                                            rowGap
-                                    )
-
-                child.layout(
-                    childLeft,
-                    childTop,
-                    childLeft + cellWidth,
-                    childTop + cellHeight
-                )
-            }
-        }
-
-        fun getDropIndex(
-            rawX: Float,
-            rawY: Float
-        ): Int {
-
-            if (isEmpty()) {
-                return 0
-            }
-
-            val location =
-                IntArray(2)
-
-            getLocationOnScreen(
-                location
-            )
-
-            val localX =
-                rawX -
-                        location[0]
-
-            val localY =
-                rawY -
-                        location[1]
-
-            val availableWidth =
-                width -
-                        horizontalPadding * 2 -
-                        columnGap *
-                        (columns - 1)
-
-            val cellWidth =
-                availableWidth /
-                        columns
-
-            val cellHeight =
-                dp(105)
-
-            val column =
-                (
-                        (
-                                localX -
-                                        horizontalPadding
-                                ) /
-                                (
-                                        cellWidth +
-                                                columnGap
-                                        )
-                        ).toInt()
-                    .coerceIn(
-                        0,
-                        columns - 1
-                    )
-
-            val row =
-                (
-                        (
-                                localY -
-                                        verticalPadding
-                                ) /
-                                (
-                                        cellHeight +
-                                                rowGap
-                                        )
-                        ).toInt()
-                    .coerceAtLeast(0)
-
-            var index =
-                row *
-                        columns +
-                        column
-
-            if (
-                index > childCount
-            ) {
-                index =
-                    childCount
-            }
-
-            return index
-        }
-    }
-}
